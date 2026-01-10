@@ -63,3 +63,19 @@ def list_files() -> List[str]:
     """Lists all files in the workspace."""
     ensure_workspace()
     return os.listdir(WORKSPACE_DIR)
+
+def clear_workspace() -> str:
+    """Deletes all files in the workspace."""
+    ensure_workspace()
+    try:
+        files = os.listdir(WORKSPACE_DIR)
+        for file in files:
+            file_path = os.path.join(WORKSPACE_DIR, file)
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                import shutil
+                shutil.rmtree(file_path)
+        return "Workspace cleared successfully."
+    except Exception as e:
+        return f"Error clearing workspace: {str(e)}"

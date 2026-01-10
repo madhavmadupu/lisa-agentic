@@ -7,9 +7,29 @@ st.set_page_config(page_title="LISA - Local Intelligence Software Architect", la
 st.title("LISA: Local Intelligence Software Architect")
 st.markdown("### Secure, Air-Gapped Code Generation & Review")
 
-# Sidebar for status
+from tools.file_manager import clear_workspace
+import shutil
+
+# Sidebar for controls and status
 with st.sidebar:
-    st.header("Agent Status")
+    st.header("⚙️ Configuration")
+    
+    # Model Selection
+    st.subheader("Models")
+    architect_model = st.text_input("Architect Model", "llama3.1:8b")
+    coder_model = st.text_input("Coder Model", "qwen2.5-coder:7b")
+    reviewer_model = st.text_input("Reviewer Model", "mistral-nemo")
+    
+    st.divider()
+    
+    st.header("🛠️ Workspace")
+    if st.button("Clear Workspace"):
+        msg = clear_workspace()
+        st.success(msg)
+
+    st.divider()
+    
+    st.header("Status")
     status_placeholder = st.empty()
     st.info("System Ready")
 

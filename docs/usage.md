@@ -31,8 +31,14 @@ Once you submit the request, LISA's agents will start working sequentially:
     *   **Failure**: You will see error logs. The system will automatically loop back to the **Coder** agent to fix the errors based on the feedback.
 
 ### 3. Viewing Results
-*   **Generated Files**: The code is written directly to your workspace (usually in the root or a specified `generated/` folder, depending on configuration).
+*   **Generated Files**: The code is written directly to your workspace (usually in the root or a specified `workspace/` folder).
 *   **Logs**: The UI displays the conversation history and actions taken by each agent.
+
+## Configuration & Tools
+
+### Sidebar Settings
+*   **Model Selection**: You can override the default models for the Architect, Coder, and Reviewer agents if you wish to experiment with different local LLMs.
+*   **Clear Workspace**: Use this button to delete all generated files in the workspace. This is useful when starting a completely new task to avoid file conflicts.
 
 ## Tips for Best Results
 
