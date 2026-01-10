@@ -1,70 +1,46 @@
-# System Architecture
+# System Architecture & Engineering Features
 
-## Overview
+## System Architecture
 
-LISA (Local Intelligence Software Architect) is an autonomous multi-agent system designed for secure, air-gapped code generation. It uses a graph-based orchestration pattern to manage the flow of information between specialized AI agents, ensuring that generated code is not only syntactically correct but also functional and verified.
+LISA uses a **Graph-based Orchestration** (via LangGraph) to manage three distinct agents:
 
-## Core Components
+### **A. The Architect (Llama 3.1 - 8B)**
+*   **Role:** Analyzes the user's natural language request.
+*   **Function:** Breaks the request into a technical "Execution Plan" (JSON format).
 
-### 1. Orchestration Engine (LangGraph)
-The system is built on **LangGraph**, which defines the stateful workflow. The application state (`AgentState`) is passed between nodes (agents), accumulating information such as the user request, the execution plan, the generated code, and review feedback.
+### **B. The Coder (Qwen2.5-Coder - 7B)**
+*   **Role:** Implements the logic based on the Architect's plan.
+*   **Function:** Writes Python/JS code and saves it to a temporary local workspace.
 
-### 2. The Agents
+### **C. The Reviewer (Mistral-Small)**
+*   **Role:** The "Quality Gate."
+*   **Function:** 
+    *   **Static Analysis:** Runs local linters (PyLint/Flake8).
+    *   **Dynamic Analysis:** Executes the code in a restricted subprocess to see if it passes.
+    *   **Feedback Loop:** If the code fails, the Reviewer sends the error logs back to the **Coder** for a "Retry." (Max 3 attempts).
 
-LISA employs three distinct agents, each utilizing a specialized local Large Language Model (LLM):
+---
 
-#### A. The Architect (`llama3.1:8b`)
-*   **Role**: Planner and Strategist.
-*   **Input**: User's natural language request.
-*   **Responsibility**: 
-    1.  Analyzes the intent of the request.
-    2.  Decomposes the problem into a structured **Technical Execution Plan** (JSON).
-    3.  Identifies necessary files, descriptions, and dependencies.
-*   **Output**: A JSON object containing the file structure and step-by-step instructions.
+## Tech Stack (2026 Standards)
+*   **Inference Engine:** [Ollama API](https://ollama.com/) (Managing local model lifecycle).
+*   **Models:** `qwen2.5-coder:7b`, `llama3.1:8b`, `mistral-nemo`.
+*   **Orchestration:** LangGraph (for stateful, cyclical agent logic).
+*   **Memory/Context:** ChromaDB (Vector store for local documentation RAG).
+*   **Environment:** Docker (to sandbox the code execution for the Reviewer agent).
+*   **Frontend:** Streamlit or Chainlit for the engineer’s dashboard.
 
-#### B. The Coder (`qwen2.5-coder:7b`)
-*   **Role**: Implementation Specialist.
-*   **Input**: The Technical Execution Plan from the Architect and feedback from the Reviewer (if retrying).
-*   **Responsibility**:
-    1.  Iterates through the planned files.
-    2.  Writes the actual code implementation for each file.
-    3.  Saves the files to the local workspace.
-*   **Output**: Source code files written to the disk.
+---
 
-#### C. The Reviewer (`mistral-nemo`)
-*   **Role**: Quality Assurance and Tester.
-*   **Input**: The generated code files.
-*   **Responsibility**:
-    1.  **Dynamic Analysis**: Executes the generated Python code to check for runtime errors.
-    2.  **Feedback**: If execution fails, analyzes the traceback and provides specific instructions for the Coder to fix the issue.
-    3.  **Approval**: If the code runs successfully, marks the task as approved.
-*   **Output**: Review feedback (Approved/Changes Requested) and execution logs.
+## Key Engineering Features
 
-## Workflow Logic
+### **1. Agentic Self-Correction**
+Unlike standard RAG, LISA implements a **reflexion pattern**. If the code execution fails, the system captures the `Traceback` and automatically feeds it back into the LLM as a new prompt to fix the bug.
 
-The graph follows a **Self-Correction Loop**:
+### **2. Hybrid RAG Pipeline**
+The system indexes the local project directory. When a task is assigned, the **Architect** queries the local Vector DB to understand existing project patterns before suggesting new code.
 
-1.  **Start** -> **Architect**: Plans the task.
-2.  **Architect** -> **Coder**: Implements the plan.
-3.  **Coder** -> **Reviewer**: Tests the implementation.
-4.  **Reviewer** -> **Condition**:
-    *   **If Approved**: -> **End**.
-    *   **If Failed**: -> **Coder** (with error feedback).
-    *   **Max Retries**: The system limits retries (default: 3) to prevent infinite loops.
-
-## Data Flow Diagram
-
-```mermaid
-graph TD
-    User[User Request] --> Architect
-    Architect -- JSON Plan --> Coder
-    Coder -- Write Files --> Reviewer
-    Reviewer -- Execute Code --> Decision{Pass?}
-    Decision -- Yes --> End((Done))
-    Decision -- No (Feedback) --> Coder
-    
-    subgraph "Local Execution Environment"
-    Coder
-    Reviewer
-    end
-```
+### **3. Performance Monitoring (AI Observability)**
+LISA tracks:
+*   **Token Throughput:** Measured via Ollama’s `/api/generate` response headers.
+*   **Success Rate:** Percentage of tasks solved without human intervention.
+*   **Inference Latency:** Monitoring the overhead of running multiple local models.
