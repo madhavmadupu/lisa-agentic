@@ -31,5 +31,12 @@ LISA is a local-first agentic framework designed to automate the Software Develo
 *   **Coder**: Implements the code.
 *   **Reviewer**: Validates and tests the code.
 
+## Verification
+
+Run the test suite to verify the agent workflow (mocked):
+```bash
+python -m unittest tests/test_system.py
+```
+    
 ## License
 MIT
