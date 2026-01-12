@@ -13,8 +13,10 @@ from sse_starlette.sse import EventSourceResponse
 from state.graph import app as agent_app
 
 # Import Tools
+# Import Tools
 from tools.file_manager import list_files, read_file
 import logging
+from database import init_db, create_session, add_message, get_messages, get_all_sessions
 
 # Configure logging
 logging.basicConfig(
@@ -25,6 +27,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LISA Agentic API")
+
+@app.on_event("startup")
+def startup_event():
+    init_db()
 
 # CORS setup
 app.add_middleware(
@@ -81,11 +87,18 @@ async def run_agent_graph(session_id: str, request: AgentRequest):
                 # Add specific fields for easier UI parsing
                 if node == "architect":
                     payload["plan"] = state.get("plan")
+                    if payload["plan"]:
+                         plan_text = json.dumps(payload["plan"], indent=2)
+                         add_message(session_id, "agent", f"I have created a plan:\n\n{plan_text}", node="architect", meta={"plan": payload["plan"]})
                 elif node == "coder":
                     payload["code"] = state.get("code")
+                    if payload["code"]:
+                        add_message(session_id, "agent", f"I have generated code:\n\n{payload['code']}", node="coder", meta={"code": payload["code"]})
                 elif node == "reviewer":
                     payload["feedback"] = state.get("review_feedback")
                     payload["output"] = state.get("execution_output")
+                    if payload["feedback"]:
+                         add_message(session_id, "agent", f"Reviewer Feedback: {payload['feedback']}\n\nOutput: {payload.get('output', '')}", node="reviewer", meta={"feedback": payload["feedback"], "output": payload["output"]})
                 
                 await session.queue.put(json.dumps(payload))
                 
@@ -108,6 +121,11 @@ async def start_agent_run(request: AgentRequest, background_tasks: BackgroundTas
     
     # Start the graph in background
     logger.info(f"Starting background task for session {session_id}")
+    
+    # Persist session and user message
+    create_session(session_id, title=request.user_request[:50])
+    add_message(session_id, "user", request.user_request)
+
     background_tasks.add_task(run_agent_graph, session_id, request)
     
     return SessionResponse(session_id=session_id)
@@ -138,6 +156,14 @@ async def stream_agent_events(session_id: str):
                 break
 
     return EventSourceResponse(event_generator())
+
+@app.get("/api/chat/history/{session_id}")
+def get_chat_history(session_id: str):
+    return get_messages(session_id)
+
+@app.get("/api/chat/sessions")
+def list_sessions():
+    return get_all_sessions()
 
 @app.get("/api/workspace/files")
 def get_workspace_files():

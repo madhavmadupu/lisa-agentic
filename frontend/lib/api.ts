@@ -42,6 +42,34 @@ export async function getWorkspaceFiles(): Promise<{ files: string[] }> {
   return response.json();
 }
 
+export interface Session {
+  id: string;
+  title: string;
+  created_at: string;
+}
+
+export interface ChatMessage {
+  id: number;
+  session_id: string;
+  role: "user" | "agent";
+  content: string;
+  node?: string;
+  created_at: string;
+  meta?: any;
+}
+
+export async function getSessions(): Promise<Session[]> {
+  const response = await fetch(`${API_BASE_URL}/api/chat/sessions`);
+  if (!response.ok) throw new Error("Failed to fetch sessions");
+  return response.json();
+}
+
+export async function getChatHistory(sessionId: string): Promise<ChatMessage[]> {
+  const response = await fetch(`${API_BASE_URL}/api/chat/history/${sessionId}`);
+  if (!response.ok) throw new Error("Failed to fetch chat history");
+  return response.json();
+}
+
 export async function getFileContent(path: string): Promise<{ content: string }> {
   const response = await fetch(`${API_BASE_URL}/api/workspace/file?path=${encodeURIComponent(path)}`);
   if (!response.ok) {

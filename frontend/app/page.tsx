@@ -9,18 +9,15 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bot, Code2, FileText, Send, Terminal, User, RefreshCw } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { startAgentRun, API_BASE_URL, getWorkspaceFiles, getFileContent } from "@/lib/api";
+import { startAgentRun, API_BASE_URL, getWorkspaceFiles, getFileContent, getChatHistory, getSessions, Session, ChatMessage } from "@/lib/api";
 import { EventSourcePolyfill } from "event-source-polyfill";
 import { FileTree } from "@/components/file-tree";
 
-interface Message {
-  role: "user" | "agent";
-  content: string;
-}
+
 
 export default function Home() {
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -29,6 +26,10 @@ export default function Home() {
   const [files, setFiles] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
+
+  // Session State
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
 
   const fetchFiles = async () => {
     try {
@@ -39,8 +40,32 @@ export default function Home() {
     }
   };
 
+  const loadHistory = async (sessionId: string) => {
+    try {
+      const history = await getChatHistory(sessionId);
+      setMessages(history);
+      setCurrentSessionId(sessionId);
+      setTerminalOutput(["> Loaded history for session: " + sessionId]);
+    } catch (err) {
+      console.error("Failed to load history", err);
+    }
+  };
+
+  const loadSessions = async () => {
+    try {
+      const all = await getSessions();
+      setSessions(all);
+      if (all.length > 0 && !currentSessionId) {
+        loadHistory(all[0].id);
+      }
+    } catch (err) {
+      console.error("Failed to load sessions", err);
+    }
+  };
+
   useEffect(() => {
     fetchFiles();
+    loadSessions();
   }, []);
 
   const handleFileSelect = async (path: string) => {
@@ -73,13 +98,25 @@ export default function Home() {
 
     const userMsg = input;
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+
+    // Optimistic update
+    const optimisticMsg: ChatMessage = {
+      id: Date.now(),
+      session_id: currentSessionId || "temp",
+      role: "user",
+      content: userMsg,
+      created_at: new Date().toISOString()
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+
     setIsProcessing(true);
     appendTerminal(`> Starting task: ${userMsg}`);
 
     try {
       const { session_id } = await startAgentRun({ user_request: userMsg });
       appendTerminal(`> Session started: ${session_id}`);
+      setCurrentSessionId(session_id);
+      loadSessions();
 
       const eventSource = new EventSourcePolyfill(
         `${API_BASE_URL}/api/agent/stream/${session_id}`
@@ -91,11 +128,9 @@ export default function Home() {
 
         if (status === "complete") {
           appendTerminal("> Workflow completed.");
-          setMessages((prev) => [
-            ...prev,
-            { role: "agent", content: "Task finished successfully!" },
-          ]);
-          fetchFiles(); // Refresh files after run
+          // Refresh history to get the complete and correct DB state
+          loadHistory(session_id);
+          fetchFiles();
           eventSource.close();
           setIsProcessing(false);
           return;
@@ -103,10 +138,6 @@ export default function Home() {
 
         if (status === "error") {
           appendTerminal(`> Error: ${message}`);
-          setMessages((prev) => [
-            ...prev,
-            { role: "agent", content: `Error: ${message}` }
-          ]);
           eventSource.close();
           setIsProcessing(false);
           return;
@@ -115,15 +146,7 @@ export default function Home() {
         if (node) {
           appendTerminal(`> Agent [${node}] active...`);
           if (node === "architect" && payload.plan) {
-            const planText = JSON.stringify(payload.plan, null, 2);
-            setMessages(prev => [...prev, { role: "agent", content: `I have created a plan:\n\n${planText}` }]);
-          }
-          if (node === "coder" && payload.code) {
-            setMessages(prev => [...prev, { role: "agent", content: `I have generated code:\n\n${payload.code}` }]);
-          }
-          if (node === "reviewer" && payload.feedback) {
-            appendTerminal(`> Reviewer Feedback: ${payload.feedback}`);
-            setMessages(prev => [...prev, { role: "agent", content: `Reviewer Feedback: ${payload.feedback}` }]);
+            // Optional: could show a temporary plan notification if desired
           }
         }
       };
@@ -136,10 +159,6 @@ export default function Home() {
 
     } catch (error) {
       console.error(error);
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: "Failed to start agent run." },
-      ]);
       setIsProcessing(false);
     }
   };
@@ -161,12 +180,26 @@ export default function Home() {
           <ScrollArea className="h-full px-4">
             <div className="space-y-4">
               <div>
-                <h3 className="mb-2 px-2 text-sm font-semibold tracking-tight">Active Session</h3>
+                <h3 className="mb-2 px-2 text-sm font-semibold tracking-tight">Sessions</h3>
                 <div className="space-y-1">
-                  <Button variant="secondary" className="w-full justify-start">
+                  <Button variant="outline" className="w-full justify-start mb-2" onClick={() => {
+                    setCurrentSessionId(null);
+                    setMessages([]);
+                    setTerminalOutput([]);
+                  }}>
                     <FileText className="mr-2 h-4 w-4" />
-                    New Project Setup
+                    New Session
                   </Button>
+                  {sessions.map((session) => (
+                    <Button
+                      key={session.id}
+                      variant={currentSessionId === session.id ? "secondary" : "ghost"}
+                      className="w-full justify-start text-xs truncate"
+                      onClick={() => loadHistory(session.id)}
+                    >
+                      <span className="truncate">{session.title || "Untitled Session"}</span>
+                    </Button>
+                  ))}
                 </div>
               </div>
 
