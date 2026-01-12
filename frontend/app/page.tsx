@@ -1,13 +1,149 @@
+"use client";
+
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, Code2, FileText, Send, Terminal, User } from "lucide-react";
+import { Bot, Code2, FileText, Send, Terminal, User, RefreshCw } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { startAgentRun, API_BASE_URL, getWorkspaceFiles, getFileContent } from "@/lib/api";
+import { EventSourcePolyfill } from "event-source-polyfill";
+import { FileTree } from "@/components/file-tree";
+
+interface Message {
+  role: "user" | "agent";
+  content: string;
+}
 
 export default function Home() {
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Workspace State
+  const [files, setFiles] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string>("");
+
+  const fetchFiles = async () => {
+    try {
+      const { files } = await getWorkspaceFiles();
+      setFiles(files);
+    } catch (err) {
+      console.error("Failed to fetch files", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchFiles();
+  }, []);
+
+  const handleFileSelect = async (path: string) => {
+    setSelectedFile(path);
+    try {
+      const { content } = await getFileContent(path);
+      setFileContent(content);
+    } catch (err) {
+      console.error(err);
+      setFileContent("Error reading file.");
+    }
+  };
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const appendTerminal = (text: string) => {
+    setTerminalOutput((prev) => [...prev, text]);
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSubmit = async () => {
+    if (!input.trim() || isProcessing) return;
+
+    const userMsg = input;
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+    setIsProcessing(true);
+    appendTerminal(`> Starting task: ${userMsg}`);
+
+    try {
+      const { session_id } = await startAgentRun({ user_request: userMsg });
+      appendTerminal(`> Session started: ${session_id}`);
+
+      const eventSource = new EventSourcePolyfill(
+        `${API_BASE_URL}/api/agent/stream/${session_id}`
+      );
+
+      eventSource.onmessage = (event: MessageEvent) => {
+        const payload = JSON.parse(event.data);
+        const { node, status, message } = payload;
+
+        if (status === "complete") {
+          appendTerminal("> Workflow completed.");
+          setMessages((prev) => [
+            ...prev,
+            { role: "agent", content: "Task finished successfully!" },
+          ]);
+          fetchFiles(); // Refresh files after run
+          eventSource.close();
+          setIsProcessing(false);
+          return;
+        }
+
+        if (status === "error") {
+          appendTerminal(`> Error: ${message}`);
+          setMessages((prev) => [
+            ...prev,
+            { role: "agent", content: `Error: ${message}` }
+          ]);
+          eventSource.close();
+          setIsProcessing(false);
+          return;
+        }
+
+        if (node) {
+          appendTerminal(`> Agent [${node}] active...`);
+          if (node === "architect" && payload.plan) {
+            const planText = JSON.stringify(payload.plan, null, 2);
+            setMessages(prev => [...prev, { role: "agent", content: `I have created a plan:\n\n${planText}` }]);
+          }
+          if (node === "coder" && payload.code) {
+            setMessages(prev => [...prev, { role: "agent", content: `I have generated code:\n\n${payload.code}` }]);
+          }
+          if (node === "reviewer" && payload.feedback) {
+            appendTerminal(`> Reviewer Feedback: ${payload.feedback}`);
+            setMessages(prev => [...prev, { role: "agent", content: `Reviewer Feedback: ${payload.feedback}` }]);
+          }
+        }
+      };
+
+      eventSource.onerror = (err: unknown) => {
+        console.error("EventSource error:", err);
+        eventSource.close();
+        setIsProcessing(false);
+      };
+
+    } catch (error) {
+      console.error(error);
+      setMessages((prev) => [
+        ...prev,
+        { role: "agent", content: "Failed to start agent run." },
+      ]);
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="flex h-screen w-full flex-col bg-background md:flex-row">
       {/* Sidebar */}
@@ -36,15 +172,16 @@ export default function Home() {
 
               <Separator />
 
+              {/* File Tree Integration */}
               <div>
-                <h3 className="mb-2 px-2 text-sm font-semibold tracking-tight">History</h3>
-                <div className="space-y-1">
-                  <Button variant="ghost" className="w-full justify-start text-muted-foreground">
-                    Authentication Flow
+                <div className="flex items-center justify-between px-2 mb-2">
+                  <h3 className="text-sm font-semibold tracking-tight">Workspace</h3>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={fetchFiles}>
+                    <RefreshCw className="h-3 w-3" />
                   </Button>
-                  <Button variant="ghost" className="w-full justify-start text-muted-foreground">
-                    Database Schema
-                  </Button>
+                </div>
+                <div className="border rounded-md bg-background h-[300px]">
+                  <FileTree files={files} onSelect={handleFileSelect} />
                 </div>
               </div>
             </div>
@@ -56,9 +193,9 @@ export default function Home() {
       <main className="flex flex-1 flex-col overflow-hidden">
         {/* Header/Status Bar */}
         <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-6 lg:h-[60px]">
-          <span className="font-semibold">Current Task: Initial Setup</span>
+          <span className="font-semibold">Current Task: {isProcessing ? "Running..." : "Idle"}</span>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Agents: Idle</span>
+            <span className="text-xs text-muted-foreground">Agents: {isProcessing ? "Active" : "Idle"}</span>
           </div>
         </header>
 
@@ -66,32 +203,46 @@ export default function Home() {
         <div className="flex flex-1 overflow-hidden">
           {/* Chat/Interaction Panel */}
           <div className="flex w-1/2 flex-col border-r">
-            <ScrollArea className="flex-1 p-4">
+            <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
               <div className="space-y-4">
-                {/* Example Messages */}
-                <div className="flex gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <User className="h-4 w-4" />
+                {messages.map((msg, i) => (
+                  <div key={i} className="flex gap-3">
+                    <div
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${msg.role === "agent"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-primary/10"
+                        }`}
+                    >
+                      {msg.role === "agent" ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                    </div>
+                    <div
+                      className={`${msg.role === "agent" ? "bg-primary/10" : "bg-muted"
+                        } p-3 rounded-lg text-sm max-w-[80%] whitespace-pre-wrap font-mono`}
+                    >
+                      {msg.content}
+                    </div>
                   </div>
-                  <div className="bg-muted p-3 rounded-lg text-sm max-w-[80%]">
-                    Can you verify the `state.py` file?
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                    <Bot className="h-4 w-4" />
-                  </div>
-                  <div className="bg-primary/10 p-3 rounded-lg text-sm max-w-[80%]">
-                    I've checked `state.py` and noticed a missing import. I'll fix that.
-                  </div>
-                </div>
+                ))}
+                <div ref={messagesEndRef} />
               </div>
             </ScrollArea>
             <div className="p-4 border-t">
               <div className="relative">
-                <Input placeholder="Describe your task..." className="pr-12" />
-                <Button size="icon" className="absolute right-1 top-1 h-8 w-8" variant="ghost">
+                <Input
+                  placeholder="Describe your task..."
+                  className="pr-12"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                  disabled={isProcessing}
+                />
+                <Button
+                  size="icon"
+                  className="absolute right-1 top-1 h-8 w-8"
+                  variant="ghost"
+                  onClick={handleSubmit}
+                  disabled={isProcessing}
+                >
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
@@ -115,20 +266,20 @@ export default function Home() {
               <div className="flex-1 overflow-hidden p-4">
                 <TabsContent value="code" className="h-full m-0">
                   <Card className="h-full flex flex-col border-0 shadow-none">
-                    <CardHeader className="p-4 border-b">
-                      <CardTitle className="text-sm font-mono">state/state.py</CardTitle>
+                    <CardHeader className="p-4 border-b flex flex-row items-center justify-between space-y-0">
+                      <CardTitle className="text-sm font-mono truncate max-w-[calc(100%-24px)]">
+                        {selectedFile || "Select a file"}
+                      </CardTitle>
                     </CardHeader>
                     <CardContent className="flex-1 p-0 overflow-hidden font-mono text-sm">
                       <ScrollArea className="h-full p-4">
-                        <pre className="text-muted-foreground">
-                          {`from typing import TypedDict, List
-                                            
-class AgentState(TypedDict):
-    user_request: str
-    plan: dict # Architect's plan
-    code: str # Coder's output
-    review_feedback: str`}
-                        </pre>
+                        {selectedFile ? (
+                          <pre className="text-muted-foreground whitespace-pre-wrap">{fileContent}</pre>
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-muted-foreground">
+                            Select a file from the workspace to view content.
+                          </div>
+                        )}
                       </ScrollArea>
                     </CardContent>
                   </Card>
@@ -136,10 +287,10 @@ class AgentState(TypedDict):
 
                 <TabsContent value="terminal" className="h-full m-0">
                   <Card className="h-full flex flex-col border-0 shadow-none bg-black text-white">
-                    <CardContent className="flex-1 p-4 font-mono text-xs">
-                      <div className="text-green-400">$ python app.py</div>
-                      <div>Starting agents...</div>
-                      <div>Architect agent initialized.</div>
+                    <CardContent className="flex-1 p-4 font-mono text-xs overflow-auto">
+                      {terminalOutput.map((line, i) => (
+                        <div key={i}>{line}</div>
+                      ))}
                     </CardContent>
                   </Card>
                 </TabsContent>
