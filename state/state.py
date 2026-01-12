@@ -14,3 +14,6 @@ class AgentState(TypedDict):
     retry_count: int
     revision_number: int
     error: str
+    architect_model: str
+    coder_model: str
+    reviewer_model: str

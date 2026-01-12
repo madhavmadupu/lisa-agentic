@@ -19,10 +19,18 @@ def execute_python(filename: str) -> dict:
     
     # Security check
     if not safe_path.startswith(WORKSPACE_DIR):
-        return {"error": "Access denied", "stdout": "", "stderr": "Cannot execute outside workspace."}
+        return {
+            "return_code": -1,
+            "stdout": "",
+            "stderr": "Access denied. Cannot execute outside workspace."
+        }
     
     if not os.path.exists(safe_path):
-        return {"error": "File not found", "stdout": "", "stderr": f"File {filename} does not exist."}
+        return {
+            "return_code": -1,
+            "stdout": "",
+            "stderr": f"File {filename} does not exist."
+        }
 
     try:
         # executing with the same python interpreter

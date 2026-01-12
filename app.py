@@ -43,7 +43,13 @@ if st.button("Start Agents"):
         st.info("Agents activated...")
         
         # Initial State
-        initial_state = {"user_request": user_request, "retry_count": 0}
+        initial_state = {
+            "user_request": user_request, 
+            "retry_count": 0,
+            "architect_model": architect_model,
+            "coder_model": coder_model,
+            "reviewer_model": reviewer_model
+        }
         
         # Run graph
         events = graph_app.stream(initial_state)
@@ -51,8 +57,13 @@ if st.button("Start Agents"):
         # Container for logs
         log_container = st.container()
         
-        for event in events:
+        for i, event in enumerate(events):
             for node, state in event.items():
+                
+                # Check for errors
+                if state.get("error"):
+                    st.error(f"Error in {node}: {state.get('error')}")
+                
                 with log_container.expander(f"Agent: {node.capitalize()}", expanded=True):
                     # customized display based on node
                     if node == "architect":
@@ -60,7 +71,7 @@ if st.button("Start Agents"):
                     elif node == "coder":
                         st.code(state.get("code"), language="python")
                     elif node == "reviewer":
-                        st.text_area("Execution Output", state.get("execution_output"), height=100)
+                        st.text_area("Execution Output", state.get("execution_output"), height=100, key=f"exec_out_{i}")
                         st.write(f"**Feedback:** {state.get('review_feedback')}")
 
         st.success("Task Complete!")

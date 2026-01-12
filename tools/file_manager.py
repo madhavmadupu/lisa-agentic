@@ -28,6 +28,9 @@ def write_file(filename: str, content: str) -> str:
         return f"Error: Access denied. Cannot write outside workspace: {filename}"
         
     try:
+        # Ensure subdirectory exists
+        os.makedirs(os.path.dirname(safe_path), exist_ok=True)
+        
         with open(safe_path, "w", encoding="utf-8") as f:
             f.write(content)
         return f"Successfully wrote to {filename}"

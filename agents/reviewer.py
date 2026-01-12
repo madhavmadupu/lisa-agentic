@@ -3,8 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from tools.executor import execute_python
 import os
 
-# Initialize the model
-llm = ChatOllama(model="mistral-nemo", temperature=0)
+# Initialize the model (removed global init)
 
 def reviewer_node(state):
     """
@@ -12,6 +11,8 @@ def reviewer_node(state):
     """
     print("--- Reviewer Agent ---")
     plan = state['plan']
+    model_name = state.get('reviewer_model', "mistral-nemo")
+    llm = ChatOllama(model=model_name, temperature=0, base_url="http://127.0.0.1:11434")
     
     feedback_log = []
     has_errors = False
