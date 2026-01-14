@@ -2,8 +2,10 @@ import subprocess
 import os
 import sys
 
+from config import config
+
 # Define workspace
-WORKSPACE_DIR = os.path.abspath("workspace")
+WORKSPACE_DIR = config.WORKSPACE_DIR
 
 def execute_python(filename: str) -> dict:
     """

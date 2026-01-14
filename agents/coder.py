@@ -3,6 +3,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from tools.file_manager import write_file, read_file
 import os
 
+from config import config
+
 # Initialize the model (removed global init)
 
 def coder_node(state):
@@ -11,8 +13,8 @@ def coder_node(state):
     """
     print("--- Coder Agent ---")
     plan = state['plan']
-    model_name = state.get('coder_model', "qwen2.5-coder:7b")
-    llm = ChatOllama(model=model_name, temperature=0.2, base_url="http://127.0.0.1:11434")
+    model_name = state.get('coder_model', config.CODER_MODEL)
+    llm = ChatOllama(model=model_name, temperature=0.2, base_url=config.OLLAMA_BASE_URL)
     
     if not plan:
         return {"code": None, "error": "No plan provided."}
@@ -21,11 +23,11 @@ def coder_node(state):
     
     for file_info in plan.get('files', []):
         filename = file_info['filename']
-        # Sanitize filename to ensure it is relative and safe
-        filename = filename.lstrip("/").lstrip("\\").replace("..", "")
-        if ":" in filename: # Remove drive letter if present
-            filename = filename.split(":")[-1].lstrip("/").lstrip("\\")
-            
+        # Path validation is handled by file_manager.write_file
+        # We just ensure it's a string
+        if not filename:
+             continue
+             
         description = file_info['description']
         
         # Check if this is a retry/fix attempt

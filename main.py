@@ -18,9 +18,11 @@ from tools.file_manager import list_files, read_file
 import logging
 from database import init_db, create_session, add_message, get_messages, get_all_sessions
 
+from config import config
+
 # Configure logging
 logging.basicConfig(
-    filename='backend_debug.log',
+    filename=config.DEBUG_LOG_PATH,
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
@@ -35,7 +37,7 @@ def startup_event():
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for dev; restrict in prod
+    allow_origins=["http://localhost:8501", "http://127.0.0.1:8501"],  # Restrict to local Streamlit default
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -53,9 +55,9 @@ sessions: Dict[str, AgentSession] = {}
 # --- Pydantic Models ---
 class AgentRequest(BaseModel):
     user_request: str
-    architect_model: str = "llama3.1:8b"
-    coder_model: str = "qwen2.5-coder:7b"
-    reviewer_model: str = "mistral-nemo"
+    architect_model: str = config.ARCHITECT_MODEL
+    coder_model: str = config.CODER_MODEL
+    reviewer_model: str = config.REVIEWER_MODEL
 
 class SessionResponse(BaseModel):
     session_id: str

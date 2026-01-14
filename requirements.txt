@@ -6,3 +6,7 @@ chromadb
 pylint
 black
 pytest
+fastapi
+uvicorn
+sse-starlette
+pydantic
