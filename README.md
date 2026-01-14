@@ -43,6 +43,11 @@ Cloud-based AI (GitHub Copilot, GPT-4) poses security risks for proprietary code
 └── README.md          # Project documentation
 ```
 
+## 🏗️ System Architecture
+LISA utilizes a stateful multi-agent orchestration pattern built on LangGraph.
+<img width="4642" height="2910" alt="image" src="https://github.com/user-attachments/assets/4b148e69-69ac-4509-b9eb-41d6f83d3b48" />
+
+
 ## 5. Getting Started
 
 ### Prerequisites
