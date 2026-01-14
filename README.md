@@ -58,7 +58,7 @@ LISA utilizes a stateful multi-agent orchestration pattern built on LangGraph.
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/madhavmadupu/lisa-agentic.git
     cd lisa-agentic
     ```
 
