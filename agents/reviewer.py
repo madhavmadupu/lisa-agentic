@@ -1,7 +1,7 @@
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from tools.executor import execute_python
-import os
+
 
 from config import config
 

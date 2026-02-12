@@ -2,10 +2,10 @@ import os
 import uuid
 import asyncio
 import json
-from typing import Dict, List, Optional
+from typing import Dict
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -14,7 +14,7 @@ from state.graph import app as agent_app
 
 # Import Tools
 # Import Tools
-from tools.file_manager import list_files, read_file
+from tools.file_manager import read_file
 import logging
 from database import init_db, create_session, add_message, get_messages, get_all_sessions
 
@@ -179,14 +179,14 @@ def get_workspace_files():
         from tools.file_manager import WORKSPACE_DIR
         
         file_tree = []
-        for root, dirs, files in os.walk(WORKSPACE_DIR):
+        for root, _, files in os.walk(WORKSPACE_DIR):
             for file in files:
                 rel_path = os.path.relpath(os.path.join(root, file), WORKSPACE_DIR)
                 file_tree.append(rel_path)
                 
         return {"files": file_tree}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 @app.get("/api/workspace/file")
 def get_file_content(path: str):
@@ -207,4 +207,4 @@ def get_models():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

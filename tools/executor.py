@@ -36,6 +36,7 @@ def execute_python(filename: str) -> dict:
 
     try:
         # executing with the same python interpreter
+        # Trusted input: filename is validated to be within WORKSPACE_DIR above
         result = subprocess.run(
             [sys.executable, safe_path],
             capture_output=True,

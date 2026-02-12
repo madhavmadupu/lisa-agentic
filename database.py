@@ -1,8 +1,6 @@
 import sqlite3
 import json
-from datetime import datetime
-from typing import List, Dict, Optional
-import os
+from typing import Dict
 
 DB_PATH = "lisa.db"
 
